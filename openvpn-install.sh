@@ -1190,6 +1190,44 @@ function revokeClient() {
 	echo "Certificate for client $CLIENT revoked."
 }
 
+function revokeClientByName() {
+  # Define an empty array
+  clientNames=()
+
+  # Extract valid client names and add them to the array
+  while read -r line; do
+      clientName=$(echo "$line" | cut -d '=' -f 2)
+      clientNames+=("$clientName")
+  done < <(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V")
+  
+  echo "Enter the name of the existing client certificate you want to revoke"
+  tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | nl -s ') '
+
+	until [[ $CLIENT =~ ^[a-zA-Z0-9_-]+$ ]]; do
+		read -rp "Client name: " -e CLIENT
+	done
+ 
+  # Loop check if the input value is in the array
+  until [[ " ${clientNames[@]} " =~ " $CLIENT " ]]; do
+      echo "The client name entered is not a valid value！"
+      read -rp "Please re-enter: " CLIENT
+  done
+	CLIENT=$CLIENT
+	cd /etc/openvpn/easy-rsa/ || return
+	./easyrsa --batch revoke "$CLIENT"
+	EASYRSA_CRL_DAYS=3650 ./easyrsa gen-crl
+	rm -f /etc/openvpn/crl.pem
+	cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/crl.pem
+	chmod 644 /etc/openvpn/crl.pem
+	find /home/ -maxdepth 2 -name "$CLIENT.ovpn" -delete
+	rm -f "/root/$CLIENT.ovpn"
+	sed -i "/^$CLIENT,.*/d" /etc/openvpn/ipp.txt
+	cp /etc/openvpn/easy-rsa/pki/index.txt{,.bk}
+
+	echo ""
+	echo "Certificate for client $CLIENT revoked."
+}
+
 function removeUnbound() {
 	# Remove OpenVPN-related config
 	sed -i '/include: \/etc\/unbound\/openvpn.conf/d' /etc/unbound/unbound.conf
@@ -1311,12 +1349,12 @@ function manageMenu() {
 	echo "What do you want to do?"
 	echo "   1) Add a new user"
 	echo "   2) Revoke existing user"
-	echo "   3) Remove OpenVPN"
-	echo "   4) Exit"
-	until [[ $MENU_OPTION =~ ^[1-4]$ ]]; do
-		read -rp "Select an option [1-4]: " MENU_OPTION
+  echo "   3) Revoke existing user by name"
+  echo "   4) Remove OpenVPN"
+	echo "   5) Exit"
+	until [[ $MENU_OPTION =~ ^[1-5]$ ]]; do
+		read -rp "Select an option [1-5]: " MENU_OPTION
 	done
-
 	case $MENU_OPTION in
 	1)
 		newClient
@@ -1325,9 +1363,12 @@ function manageMenu() {
 		revokeClient
 		;;
 	3)
-		removeOpenVPN
+		revokeClientByName
 		;;
 	4)
+    removeOpenVPN
+  	;;
+	5)
 		exit 0
 		;;
 	esac
