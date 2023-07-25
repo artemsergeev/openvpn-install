@@ -1366,8 +1366,8 @@ function manageMenu() {
 		revokeClientByName
 		;;
 	4)
-    removeOpenVPN
-  	;;
+    	removeOpenVPN
+  		;;
 	5)
 		exit 0
 		;;
